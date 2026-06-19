@@ -7,33 +7,75 @@ jobs:
   build-and-render:
     runs-on: ubuntu-latest
     steps:
-      # 1. Fetch your church assets
+      # 1. Pull down your local intro/outro assets from your repository
       - name: Checkout Church Assets
         uses: actions/checkout@v4
 
-      # 2. Spin up the native command-line FFmpeg engine core
-      - name: Setup Headless FFmpeg
-        uses: rlespinasse/github-action-ffmpeg@v1
-
-      # 3. SECURE DOWNLOAD: Uses your service account secret to grab the raw file via its ID
-      - name: Ingest Raw Sermon File
-        uses: samuelint/google-drive-download@v1.1.1
+      # 2. Prepare the native Python environment
+      - name: Set up Python Engine
+        uses: actions/setup-python@v5
         with:
-          file_id: "${{ github.event.client_payload.fileId }}"
-          service_account: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY }}
-          output_path: "raw_sermon.mov"
+          python-version: '3.10'
 
+      # 3. Install official, highly-maintained Google API client libraries
+      - name: Install Google Client Dependencies
+        run: pip install google-api-python-client google-auth-httplib2 google-auth-oauthlib
+
+      # 4. NATIVE DOWNLOAD: Uses Python to safely stream the raw file via its ID
+      - name: Ingest Raw Sermon File
+        run: |
+          python -c '
+          import os, json
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaIoBaseDownload
+          from google.oauth2 import service_account
+
+          creds_json = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT_KEY"])
+          creds = service_account.Credentials.from_service_account_info(creds_json)
+          service = build("drive", "v3", credentials=creds)
+          
+          request = service.files().get_media(fileId=os.environ["FILE_ID"])
+          with open("raw_sermon.mp4", "wb") as f:
+              downloader = MediaIoBaseDownload(f, request, chunksize=1024*1024*10)
+              done = False
+              while not done:
+                  status, done = downloader.next_chunk()
+          print("Download complete.")
+          '
+        env:
+          GDRIVE_SERVICE_ACCOUNT_KEY: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_KEY }}
+          FILE_ID: ${{ github.event.client_payload.fileId }}
+
+      # 5. NATIVE FFMPEG: Runs directly on the core Ubuntu runner (no marketplace action required)
       - name: Process Visual Elements and Render
         run: |
           echo "file 'assets/intro.png'" > render_manifest.txt
           echo "file 'raw_sermon.mov'" >> render_manifest.txt
           echo "file 'assets/outro.mp4'" >> render_manifest.txt
-          ffmpeg -f concat -safe 0 -i render_manifest.txt -c:v libx264 -crf 18 -preset medium -c:a aac -b:a 320k row-${{ github.event.client_payload.sheetRowId }}.mp4
+          ffmpeg -f concat -safe 0 -i render_manifest.txt -c:v libx264 -crf 18 -preset medium -c:a aac -b:a 320k output_master.mp4
 
+      # 6. NATIVE UPLOAD: Streams the final file back to your target folder
       - name: Export Master File back to Google Drive
-        uses: adityassandilya/gdrive-upload-action@v1
-        with:
-          credentials: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_KEY }}
-          filename: 'row-${{ github.event.client_payload.sheetRowId }}.mp4'
-          folderId: '${{ github.event.client_payload.targetFolderId }}'
-          overwrite: 'true'
+        run: |
+          python -c '
+          import os, json
+          from googleapiclient.discovery import build
+          from googleapiclient.http import MediaFileUpload
+          from google.oauth2 import service_account
+
+          creds_json = json.loads(os.environ["GDRIVE_SERVICE_ACCOUNT_KEY"])
+          creds = service_account.Credentials.from_service_account_info(creds_json)
+          service = build("drive", "v3", credentials=creds)
+          
+          file_metadata = {
+              "name": f"row-{os.environ[\"ROW_ID\"]}.mp4",
+              "parents": [os.environ["TARGET_FOLDER_ID"]]
+          }
+          media = MediaFileUpload("output_master.mp4", mimetype="video/mp4", resumable=True)
+          file = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
+          print(f"Upload complete. File ID: {file.get(\"id\")}")
+          '
+        env:
+          GDRIVE_SERVICE_ACCOUNT_KEY: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_KEY }}
+          ROW_ID: ${{ github.event.client_payload.sheetRowId }}
+          TARGET_FOLDER_ID: ${{ github.event.client_payload.targetFolderId }}
