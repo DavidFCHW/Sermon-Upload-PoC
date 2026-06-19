@@ -7,16 +7,21 @@ jobs:
   build-and-render:
     runs-on: ubuntu-latest
     steps:
+      # 1. Fetch your church assets
       - name: Checkout Church Assets
         uses: actions/checkout@v4
 
+      # 2. Spin up the native command-line FFmpeg engine core
       - name: Setup Headless FFmpeg
         uses: rlespinasse/github-action-ffmpeg@v1
 
-      # The payload fields are passed dynamically from Make.com
+      # 3. SECURE DOWNLOAD: Uses your service account secret to grab the raw file via its ID
       - name: Ingest Raw Sermon File
-        run: |
-          curl -L "${{ github.event.client_payload.fileId }}" -o raw_sermon.mov
+        uses: samuelint/google-drive-download@v1.1.1
+        with:
+          file_id: "${{ github.event.client_payload.fileId }}"
+          service_account: ${{ secrets.GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY }}
+          output_path: "raw_sermon.mov"
 
       - name: Process Visual Elements and Render
         run: |
