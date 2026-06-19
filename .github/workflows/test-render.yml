@@ -16,7 +16,7 @@ jobs:
       # The payload fields are passed dynamically from Make.com
       - name: Ingest Raw Sermon File
         run: |
-          curl -L "${{ github.event.client_payload.downloadUrl }}" -o raw_sermon.mov
+          curl -L "${{ github.event.client_payload.fileId }}" -o raw_sermon.mov
 
       - name: Process Visual Elements and Render
         run: |
