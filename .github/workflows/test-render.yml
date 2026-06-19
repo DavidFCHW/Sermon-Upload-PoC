@@ -20,7 +20,7 @@ jobs:
 
       - name: Process Visual Elements and Render
         run: |
-          echo "file 'assets/intro.mp4'" > render_manifest.txt
+          echo "file 'assets/intro.png'" > render_manifest.txt
           echo "file 'raw_sermon.mov'" >> render_manifest.txt
           echo "file 'assets/outro.mp4'" >> render_manifest.txt
           ffmpeg -f concat -safe 0 -i render_manifest.txt -c:v libx264 -crf 18 -preset medium -c:a aac -b:a 320k row-${{ github.event.client_payload.sheetRowId }}.mp4
