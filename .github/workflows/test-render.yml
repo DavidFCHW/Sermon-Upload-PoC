@@ -73,13 +73,14 @@ jobs:
           creds = service_account.Credentials.from_service_account_info(creds_json)
           service = build("drive", "v3", credentials=creds)
           
+          row_id = os.environ["ROW_ID"]
           file_metadata = {
-              "name": f"row-{os.environ[\"ROW_ID\"]}.mp4",
+              "name": "row-" + row_id + ".mp4",
               "parents": [os.environ["TARGET_FOLDER_ID"]]
           }
           media = MediaFileUpload("output_master.mp4", mimetype="video/mp4", resumable=True)
           file = service.files().create(body=file_metadata, media_body=media, fields="id").execute()
-          print(f"Upload complete. File ID: {file.get(\"id\")}")
+          print("Upload complete. File ID: " + file.get("id"))
           '
         env:
           GDRIVE_SERVICE_ACCOUNT_KEY: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_KEY }}
