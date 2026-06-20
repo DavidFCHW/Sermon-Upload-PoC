@@ -46,15 +46,21 @@ jobs:
           GDRIVE_SERVICE_ACCOUNT_KEY: ${{ secrets.GDRIVE_SERVICE_ACCOUNT_KEY }}
           FILE_ID: ${{ github.event.client_payload.fileId }}
 
-      # 5. NATIVE FFMPEG: Runs directly on the core Ubuntu runner (no marketplace action required)
+      # 5. Install FFmpeg directly from the native Ubuntu package manager
+      - name: Install System FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      # 6. NATIVE FFMPEG: Runs directly on the core Ubuntu runner (no marketplace action required)
       - name: Process Visual Elements and Render
         run: |
-          echo "file 'assets/intro.png'" > render_manifest.txt
+          echo "file 'assets/intro.mp4'" > render_manifest.txt
           echo "file 'raw_sermon.mov'" >> render_manifest.txt
           echo "file 'assets/outro.mp4'" >> render_manifest.txt
           ffmpeg -f concat -safe 0 -i render_manifest.txt -c:v libx264 -crf 18 -preset medium -c:a aac -b:a 320k output_master.mp4
 
-      # 6. NATIVE UPLOAD: Streams the final file back to your target folder
+      # 7. NATIVE UPLOAD: Streams the final file back to your target folder
       - name: Export Master File back to Google Drive
         run: |
           python -c '
